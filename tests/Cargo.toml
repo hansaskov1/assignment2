@@ -1,0 +1,12 @@
+[package]
+name = "assignment2-tests"
+version = "0.1.0"
+authors = ["hansaskov <hansaskov1999@gmail.com>"]
+edition = "2021"
+resolver = "2"
+rust-version = "1.71"
+
+[dependencies]
+anyhow = "1.0.82"
+
+[target.'cfg(target_os = "linux")']
