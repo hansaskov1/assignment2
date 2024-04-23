@@ -65,15 +65,12 @@ fn main() {
                     .unwrap();
 
                 while let Ok(event) = mqtt_conn.next() {
-                    match event.payload() {
-                        EventPayload::Received { topic, data, .. } => {
-                            if topic == Some(MQTT_COMMAND_TOPIC) {
-                                if let Ok(command) = data.try_into() {
-                                    tx.send(command).unwrap();
-                                }
+                    if let EventPayload::Received { topic, data, .. } = event.payload() {
+                        if topic == Some(MQTT_COMMAND_TOPIC) {
+                            if let Ok(command) = data.try_into() {
+                                tx.send(command).unwrap();
                             }
                         }
-                        _ => {}
                     }
                 }
 
