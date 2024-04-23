@@ -14,8 +14,6 @@ use esp_idf_svc::{
     wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi},
 };
 
-
-
 // NOTICE: Change this to your WiFi network SSID
 const WIFI_SSID: &str = "hansaskov";
 const WIFI_PASSWORD: &str = "hansaskov";
@@ -47,18 +45,16 @@ fn main() {
     // Establish connection to WiFi network
     connect_wifi(&mut wifi).unwrap();
 
-
     let adc = AdcDriver::new(peripherals.adc1, &Config::new().calibration(true)).unwrap();
     let adc_pin: AdcChannelDriver<{ attenuation::DB_6 }, _> =
         AdcChannelDriver::new(peripherals.pins.gpio34).unwrap();
-
     let mut adc_temp_reader = AdcTempReader::new(adc, adc_pin).unwrap();
 
     // Configure MQTT client
     let (mut mqtt_client, mut mqtt_conn) = mqtt_create(MQTT_BROKER, MQTT_COMMAND_TOPIC).unwrap();
 
     std::thread::scope(|s| {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::channel::<Command>();
 
         std::thread::Builder::new()
             .stack_size(6000)
@@ -71,14 +67,9 @@ fn main() {
                 while let Ok(event) = mqtt_conn.next() {
                     match event.payload() {
                         EventPayload::Received { topic, data, .. } => {
-                            log::info!("Message recieved");
-                            if let Some(t) = topic {
-                                if t == MQTT_COMMAND_TOPIC {
-                                    let command: Result<Command, _> = data.try_into();
-
-                                    if let Ok(command) = command {
-                                        tx.send(command).unwrap();
-                                    }
+                            if topic == Some(MQTT_COMMAND_TOPIC) {
+                                if let Ok(command) = data.try_into() {
+                                    tx.send(command).unwrap();
                                 }
                             }
                         }
@@ -92,12 +83,8 @@ fn main() {
                     if let Ok(command) = command {
                         let duration_interval = Duration::from_millis(command.interval_ms.into());
                         for i in command.num_measurements..0 {
-                            // Start counter
                             let start_response = Instant::now();
-                            // Read ADC value
-
                             let temperature = adc_temp_reader.read_temperature().unwrap();
-
                             let uptime = get_uptime(start_time);
 
                             // Publish MQTT message
@@ -120,7 +107,6 @@ fn main() {
                         }
                     }
                 }
-
             })
             .unwrap();
     })
