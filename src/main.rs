@@ -2,10 +2,11 @@ use std::sync::mpsc;
 use std::time::Instant;
 use std::{thread, time::Duration};
 
-use assignment2::command::{self, Command};
+use assignment2::adc::AdcTempReader;
+use assignment2::command::Command;
 use esp_idf_hal::adc::*;
 use esp_idf_hal::{adc::config::Config, peripherals::Peripherals};
-use esp_idf_svc::mqtt::client::{Details, EventPayload, QoS};
+use esp_idf_svc::mqtt::client::{EventPayload, QoS};
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     mqtt::client::{EspMqttClient, EspMqttConnection, MqttClientConfiguration},
@@ -24,9 +25,6 @@ const MQTT_BROKER: &str = "mqtt://192.168.232.62:1883";
 const MQTT_COMMAND_TOPIC: &str = "command";
 const MQTT_RESPONSE_TOPIC: &str = "response";
 
-
-
-
 fn main() {
     let start_time = Instant::now();
 
@@ -35,7 +33,7 @@ fn main() {
     // Bind the log crate to the ESP Logging facilities
     esp_idf_svc::log::EspLogger::initialize_default();
 
-    let peripherals = Peripherals::take().unwrap();
+    let mut peripherals = Peripherals::take().unwrap();
     let sys_loop = EspSystemEventLoop::take().unwrap();
     let nvs = EspDefaultNvsPartition::take().unwrap();
 
@@ -49,12 +47,15 @@ fn main() {
     // Establish connection to WiFi network
     connect_wifi(&mut wifi).unwrap();
 
+
+    let adc = AdcDriver::new(peripherals.adc1, &Config::new().calibration(true)).unwrap();
+    let adc_pin: AdcChannelDriver<{ attenuation::DB_6 }, _> =
+        AdcChannelDriver::new(peripherals.pins.gpio34).unwrap();
+
+    let mut adc_temp_reader = AdcTempReader::new(adc, adc_pin).unwrap();
+
     // Configure MQTT client
     let (mut mqtt_client, mut mqtt_conn) = mqtt_create(MQTT_BROKER, MQTT_COMMAND_TOPIC).unwrap();
-
-    let mut adc = AdcDriver::new(peripherals.adc1, &Config::new().calibration(true)).unwrap();
-    let mut adc_pin: AdcChannelDriver<{ attenuation::DB_6 }, _> =
-        AdcChannelDriver::new(peripherals.pins.gpio34).unwrap();
 
     std::thread::scope(|s| {
         let (tx, rx) = mpsc::channel();
@@ -94,9 +95,8 @@ fn main() {
                             // Start counter
                             let start_response = Instant::now();
                             // Read ADC value
-                            let adc_value = adc.read(&mut adc_pin).unwrap();
 
-                            let temperature = convert_tempurature(adc_value);
+                            let temperature = adc_temp_reader.read_temperature().unwrap();
 
                             let uptime = get_uptime(start_time);
 
@@ -121,7 +121,6 @@ fn main() {
                     }
                 }
 
-                log::info!("Connection closed");
             })
             .unwrap();
     })
@@ -165,12 +164,6 @@ fn mqtt_create(
     log::info!("MQTT client connected");
 
     Ok((mqtt_client, mqtt_conn))
-}
-
-// See datasheet https://www.ti.com/lit/ds/symlink/lmt86.pdf for the conversion at page 10
-// See wolframalpha for a simplified version https://www.wolframalpha.com/input?i=%2810.888+-+sqrt%28%2810.888+*+10.888%29+%2B+4.+*+0.00347+*+%281777.3+-+x+%29+%29%29+%2F%28+2.+*+%28-0.00347%29%29+%2B+30
-pub fn convert_tempurature(adc_value: u16) -> f32 {
-    -1538.88 + 144.092 * f32::sqrt(143.217 - 0.01388 * adc_value as f32)
 }
 
 fn get_uptime(start_time: Instant) -> u128 {

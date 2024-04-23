@@ -1,4 +1,7 @@
-use std::convert::TryInto;
+use std::{
+    convert::TryInto,
+    time::{Duration, Instant},
+};
 
 #[derive(Debug)]
 pub struct Command {
