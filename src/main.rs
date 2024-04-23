@@ -75,7 +75,6 @@ fn main() {
                 }
 
                 loop {
-
                     if let Ok(command) = rx.recv() {
                         let duration_interval = Duration::from_millis(command.interval_ms.into());
                         for i in command.num_measurements..0 {

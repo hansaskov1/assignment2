@@ -1,6 +1,4 @@
-use std::{
-    convert::TryInto,
-};
+use std::convert::TryInto;
 
 #[derive(Debug)]
 pub struct Command {
