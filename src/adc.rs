@@ -1,7 +1,6 @@
 use esp_idf_hal::{
-    adc::{attenuation, config::Config, AdcChannelDriver, AdcDriver, ADC1},
+    adc::{attenuation, AdcChannelDriver, AdcDriver, ADC1},
     gpio::Gpio34,
-    peripherals::Peripherals,
 };
 
 pub struct AdcTempReader<'a> {

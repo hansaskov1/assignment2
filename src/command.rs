@@ -1,6 +1,5 @@
 use std::{
     convert::TryInto,
-    time::{Duration, Instant},
 };
 
 #[derive(Debug)]

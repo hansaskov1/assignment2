@@ -14,7 +14,7 @@ use esp_idf_svc::{
     wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi},
 };
 
-use log;
+
 
 // NOTICE: Change this to your WiFi network SSID
 const WIFI_SSID: &str = "hansaskov";
@@ -33,7 +33,7 @@ fn main() {
     // Bind the log crate to the ESP Logging facilities
     esp_idf_svc::log::EspLogger::initialize_default();
 
-    let mut peripherals = Peripherals::take().unwrap();
+    let peripherals = Peripherals::take().unwrap();
     let sys_loop = EspSystemEventLoop::take().unwrap();
     let nvs = EspDefaultNvsPartition::take().unwrap();
 
@@ -167,5 +167,5 @@ fn mqtt_create(
 }
 
 fn get_uptime(start_time: Instant) -> u128 {
-    start_time.elapsed().as_millis().into()
+    start_time.elapsed().as_millis()
 }
