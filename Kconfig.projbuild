@@ -1,0 +1,23 @@
+menu "Configuration"
+
+config WIFI_SSID
+    string "WiFi SSID"
+    default "hansaskov"
+    
+config WIFI_PASSWORD
+    string "WiFi Password"
+    default "hansaskov"
+    
+config MQTT_BROKER
+    string "MQTT Broker URL"
+    default "mqtt://192.168.45.62:1883"
+    
+config MQTT_COMMAND_TOPIC
+    string "MQTT Command Topic"
+    default "command"
+    
+config MQTT_RESPONSE_TOPIC
+    string "MQTT Response Topic"
+    default "response"
+    
+endmenu

@@ -4,8 +4,8 @@ use std::{thread, time::Duration};
 
 use assignment2::adc::AdcTempReader;
 use assignment2::command::Command;
+use assignment2::kconfig::ProjBuild;
 use esp_idf_hal::adc::*;
-use esp_idf_hal::sys::EspError;
 use esp_idf_hal::{adc::config::Config, peripherals::Peripherals};
 use esp_idf_svc::mqtt::client::{EventPayload, QoS};
 use esp_idf_svc::{
@@ -15,18 +15,12 @@ use esp_idf_svc::{
     wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi},
 };
 
-// NOTICE: Change this to your WiFi network SSID
-const WIFI_SSID: &str = "hansaskov";
-const WIFI_PASSWORD: &str = "hansaskov";
+const KCONFIG: &str = include_str!("../Kconfig.projbuild");
 
-// NOTICE: Change this to your MQTT broker URL, make sure the broker is on the same network as you
-const MQTT_BROKER: &str = "mqtt://192.168.45.62:1883";
-const MQTT_COMMAND_TOPIC: &str = "command";
-const MQTT_RESPONSE_TOPIC: &str = "response";
 
 fn main() {
     let start_time = Instant::now();
-
+    
     esp_idf_svc::sys::link_patches();
 
     // Bind the log crate to the ESP Logging facilities
@@ -36,6 +30,11 @@ fn main() {
     let sys_loop = EspSystemEventLoop::take().unwrap();
     let nvs = EspDefaultNvsPartition::take().unwrap();
 
+    let config: ProjBuild = ProjBuild::parse(KCONFIG);
+
+    log::info!("{KCONFIG:?}");
+    log::info!("{:?}", config);
+
     // Configure Wifi
     let mut wifi = BlockingWifi::wrap(
         EspWifi::new(peripherals.modem, sys_loop.clone(), Some(nvs)).unwrap(),
@@ -44,7 +43,7 @@ fn main() {
     .unwrap();
 
     // Establish connection to WiFi network
-    connect_wifi(&mut wifi).unwrap();
+    connect_wifi(&mut wifi, &config).unwrap();
 
     let adc = AdcDriver::new(peripherals.adc1, &Config::new().calibration(true)).unwrap();
     let adc_pin: AdcChannelDriver<{ attenuation::DB_6 }, _> =
@@ -52,7 +51,7 @@ fn main() {
     let mut adc_temp_reader = AdcTempReader::new(adc, adc_pin).unwrap();
 
     // Configure MQTT client
-    let (mut mqtt_client, mut mqtt_conn) = mqtt_create(MQTT_BROKER).unwrap();
+    let (mut mqtt_client, mut mqtt_conn) = mqtt_create(&config.mqtt_broker).unwrap();
 
     std::thread::scope(|s| {
         let (tx, rx) = mpsc::channel::<Command>();
@@ -62,7 +61,7 @@ fn main() {
             .spawn_scoped(s, move || {
                 while let Ok(event) = mqtt_conn.next() {
                     if let EventPayload::Received { topic, data, .. } = event.payload() {
-                        if topic == Some(MQTT_COMMAND_TOPIC) {
+                        if topic == Some(&config.mqtt_command_topic) {
                             log::info!("Received message {data:?} on {topic:?}");
                             if let Ok(command) = data.try_into() {
                                 tx.send(command).unwrap();
@@ -74,10 +73,10 @@ fn main() {
             .unwrap();
 
         mqtt_client
-            .subscribe(MQTT_COMMAND_TOPIC, QoS::AtMostOnce)
+            .subscribe(&config.mqtt_command_topic, QoS::AtMostOnce)
             .unwrap();
         mqtt_client
-            .subscribe(MQTT_RESPONSE_TOPIC, QoS::AtMostOnce)
+            .subscribe(&config.mqtt_response_topic, QoS::AtMostOnce)
             .unwrap();
 
         log::info!("Initializing, wait 0,5 seconds");
@@ -85,7 +84,7 @@ fn main() {
 
         let initialized_message = "Started";
         mqtt_client.publish(
-            MQTT_RESPONSE_TOPIC,
+            &config.mqtt_response_topic,
             QoS::AtLeastOnce,
             false,
             initialized_message.as_bytes(),
@@ -108,7 +107,7 @@ fn main() {
                     log::info!("Sending values: {i},{temperature},{uptime}");
 
                     mqtt_client
-                        .publish(MQTT_RESPONSE_TOPIC, QoS::AtLeastOnce, false, msg.as_bytes())
+                        .publish(&config.mqtt_response_topic, QoS::AtLeastOnce, false, msg.as_bytes())
                         .unwrap();
                     // Duration interval - time spend sending the response
                     let sleep_duration = duration_interval - start_response.elapsed();
@@ -123,11 +122,13 @@ fn main() {
     })
 }
 
-fn connect_wifi(wifi: &mut BlockingWifi<EspWifi<'static>>) -> anyhow::Result<()> {
+fn connect_wifi(wifi: &mut BlockingWifi<EspWifi<'static>>, config: &ProjBuild) -> anyhow::Result<()> {
+
+
     wifi.set_configuration(&Configuration::Client(ClientConfiguration {
-        ssid: WIFI_SSID.try_into().unwrap(),
+        ssid: config.wifi_ssid.try_into().unwrap(),
         auth_method: AuthMethod::WPA2WPA3Personal,
-        password: WIFI_PASSWORD.try_into().unwrap(),
+        password: config.wifi_password.try_into().unwrap(),
         ..Default::default()
     }))?;
 
