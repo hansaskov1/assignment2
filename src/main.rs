@@ -95,27 +95,27 @@ fn main() {
             if let Ok(command) = rx.recv() {
                 log::info!("Recieved {command:?}");
                 let duration_interval = Duration::from_millis(command.interval_ms.into());
-                for i in command.num_measurements..0 {
+                for i in (0..command.num_measurements).rev() {
                     let start_response = Instant::now();
-                    
-                    let temperature = adc_temp_reader.read_temperature().unwrap();
+
+                    let temperature =  adc_temp_reader.read_temperature().unwrap();
 
                     let uptime = get_uptime(start_time);
 
                     // Publish MQTT message
                     let msg = format!("{i},{temperature},{uptime}");
+
                     log::info!("Sending values: {i},{temperature},{uptime}");
+
                     mqtt_client
                         .publish(MQTT_RESPONSE_TOPIC, QoS::AtLeastOnce, false, msg.as_bytes())
                         .unwrap();
-
                     // Duration interval - time spend sending the response
                     let sleep_duration = duration_interval - start_response.elapsed();
 
                     if sleep_duration > Duration::from_millis(0) {
                         log::info!("Sleeping for {sleep_duration:?}");
                         thread::sleep(sleep_duration);
-                        
                     }
                 }
             }
