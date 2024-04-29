@@ -5,6 +5,7 @@ use std::{thread, time::Duration};
 use assignment2::adc::AdcTempReader;
 use assignment2::command::Command;
 use esp_idf_hal::adc::*;
+use esp_idf_hal::sys::EspError;
 use esp_idf_hal::{adc::config::Config, peripherals::Peripherals};
 use esp_idf_svc::mqtt::client::{EventPayload, QoS};
 use esp_idf_svc::{
@@ -19,7 +20,7 @@ const WIFI_SSID: &str = "hansaskov";
 const WIFI_PASSWORD: &str = "hansaskov";
 
 // NOTICE: Change this to your MQTT broker URL, make sure the broker is on the same network as you
-const MQTT_BROKER: &str = "mqtt://192.168.232.62:1883";
+const MQTT_BROKER: &str = "mqtt://192.168.45.62:1883";
 const MQTT_COMMAND_TOPIC: &str = "command";
 const MQTT_RESPONSE_TOPIC: &str = "response";
 
@@ -51,7 +52,7 @@ fn main() {
     let mut adc_temp_reader = AdcTempReader::new(adc, adc_pin).unwrap();
 
     // Configure MQTT client
-    let (mut mqtt_client, mut mqtt_conn) = mqtt_create(MQTT_BROKER, MQTT_COMMAND_TOPIC).unwrap();
+    let (mut mqtt_client, mut mqtt_conn) = mqtt_create(MQTT_BROKER).unwrap();
 
     std::thread::scope(|s| {
         let (tx, rx) = mpsc::channel::<Command>();
@@ -59,51 +60,66 @@ fn main() {
         std::thread::Builder::new()
             .stack_size(6000)
             .spawn_scoped(s, move || {
-                log::info!("MQTT Listening for messages");
-                mqtt_client
-                    .subscribe(MQTT_RESPONSE_TOPIC, QoS::AtLeastOnce)
-                    .unwrap();
-
                 while let Ok(event) = mqtt_conn.next() {
                     if let EventPayload::Received { topic, data, .. } = event.payload() {
                         if topic == Some(MQTT_COMMAND_TOPIC) {
+                            log::info!("Received message {data:?} on {topic:?}");
                             if let Ok(command) = data.try_into() {
                                 tx.send(command).unwrap();
                             }
                         }
                     }
                 }
-
-                loop {
-                    if let Ok(command) = rx.recv() {
-                        let duration_interval = Duration::from_millis(command.interval_ms.into());
-                        for i in command.num_measurements..0 {
-                            let start_response = Instant::now();
-                            let temperature = adc_temp_reader.read_temperature().unwrap();
-                            let uptime = get_uptime(start_time);
-
-                            // Publish MQTT message
-                            let msg = format!("{i},{temperature},{uptime}");
-                            mqtt_client
-                                .publish(
-                                    MQTT_RESPONSE_TOPIC,
-                                    QoS::AtLeastOnce,
-                                    false,
-                                    msg.as_bytes(),
-                                )
-                                .unwrap();
-
-                            // Duration interval - time spend sending the response
-                            let sleep_duration = duration_interval - start_response.elapsed();
-
-                            if sleep_duration > Duration::from_millis(0) {
-                                thread::sleep(sleep_duration);
-                            }
-                        }
-                    }
-                }
             })
             .unwrap();
+
+        mqtt_client
+            .subscribe(MQTT_COMMAND_TOPIC, QoS::AtMostOnce)
+            .unwrap();
+        mqtt_client
+            .subscribe(MQTT_RESPONSE_TOPIC, QoS::AtMostOnce)
+            .unwrap();
+
+        log::info!("Initializing, wait 0,5 seconds");
+        thread::sleep(Duration::from_millis(500));
+
+        let initialized_message = "Started";
+        mqtt_client.publish(
+            MQTT_RESPONSE_TOPIC,
+            QoS::AtLeastOnce,
+            false,
+            initialized_message.as_bytes(),
+        );
+
+        loop {
+            if let Ok(command) = rx.recv() {
+                log::info!("Recieved {command:?}");
+                let duration_interval = Duration::from_millis(command.interval_ms.into());
+                for i in command.num_measurements..0 {
+                    let start_response = Instant::now();
+                    
+                    let temperature = adc_temp_reader.read_temperature().unwrap();
+
+                    let uptime = get_uptime(start_time);
+
+                    // Publish MQTT message
+                    let msg = format!("{i},{temperature},{uptime}");
+                    log::info!("Sending values: {i},{temperature},{uptime}");
+                    mqtt_client
+                        .publish(MQTT_RESPONSE_TOPIC, QoS::AtLeastOnce, false, msg.as_bytes())
+                        .unwrap();
+
+                    // Duration interval - time spend sending the response
+                    let sleep_duration = duration_interval - start_response.elapsed();
+
+                    if sleep_duration > Duration::from_millis(0) {
+                        log::info!("Sleeping for {sleep_duration:?}");
+                        thread::sleep(sleep_duration);
+                        
+                    }
+                }
+            }
+        }
     })
 }
 
@@ -128,21 +144,10 @@ fn connect_wifi(wifi: &mut BlockingWifi<EspWifi<'static>>) -> anyhow::Result<()>
     Ok(())
 }
 
-fn mqtt_create(
-    url: &str,
-    topic: &str,
-) -> anyhow::Result<(EspMqttClient<'static>, EspMqttConnection)> {
+fn mqtt_create(url: &str) -> anyhow::Result<(EspMqttClient<'static>, EspMqttConnection)> {
     log::info!("Starting MQTT client");
-    let (mut mqtt_client, mqtt_conn) = EspMqttClient::new(
-        url,
-        &MqttClientConfiguration {
-            ..Default::default()
-        },
-    )?;
-
-    mqtt_client.subscribe(topic, esp_idf_svc::mqtt::client::QoS::AtLeastOnce)?;
-
-    log::info!("MQTT client connected");
+    let (mqtt_client, mqtt_conn) = EspMqttClient::new(url, &MqttClientConfiguration::default())?;
+    log::info!("MQTT client created");
 
     Ok((mqtt_client, mqtt_conn))
 }
