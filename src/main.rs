@@ -17,10 +17,9 @@ use esp_idf_svc::{
 
 const KCONFIG: &str = include_str!("../Kconfig.projbuild");
 
-
 fn main() {
     let start_time = Instant::now();
-    
+
     esp_idf_svc::sys::link_patches();
 
     // Bind the log crate to the ESP Logging facilities
@@ -32,8 +31,7 @@ fn main() {
 
     let config: ProjBuild = ProjBuild::parse(KCONFIG);
 
-    log::info!("{KCONFIG:?}");
-    log::info!("{:?}", config);
+    log::info!("Using config: {:?}", config);
 
     // Configure Wifi
     let mut wifi = BlockingWifi::wrap(
@@ -45,17 +43,23 @@ fn main() {
     // Establish connection to WiFi network
     connect_wifi(&mut wifi, &config).unwrap();
 
+    // Initialize Analog to digital converter: 
     let adc = AdcDriver::new(peripherals.adc1, &Config::new().calibration(true)).unwrap();
     let adc_pin: AdcChannelDriver<{ attenuation::DB_6 }, _> =
         AdcChannelDriver::new(peripherals.pins.gpio34).unwrap();
+
     let mut adc_temp_reader = AdcTempReader::new(adc, adc_pin).unwrap();
 
     // Configure MQTT client
     let (mut mqtt_client, mut mqtt_conn) = mqtt_create(&config.mqtt_broker).unwrap();
 
+    // Main thread where code is executed in
     std::thread::scope(|s| {
-        let (tx, rx) = mpsc::channel::<Command>();
 
+        // Message bus to communicate between threads
+        let (command_sender, command_reciever) = mpsc::channel::<Command>();
+
+        // This new thread will listen for incoming messages in mqtt, parse the command and queue it for processing
         std::thread::Builder::new()
             .stack_size(6000)
             .spawn_scoped(s, move || {
@@ -64,7 +68,7 @@ fn main() {
                         if topic == Some(&config.mqtt_command_topic) {
                             log::info!("Received message {data:?} on {topic:?}");
                             if let Ok(command) = data.try_into() {
-                                tx.send(command).unwrap();
+                                command_sender.send(command).unwrap();
                             }
                         }
                     }
@@ -72,6 +76,7 @@ fn main() {
             })
             .unwrap();
 
+        // Subscribe to command and response topic
         mqtt_client
             .subscribe(&config.mqtt_command_topic, QoS::AtMostOnce)
             .unwrap();
@@ -79,27 +84,34 @@ fn main() {
             .subscribe(&config.mqtt_response_topic, QoS::AtMostOnce)
             .unwrap();
 
+        // Add small delay to make sure mqtt starts up correctly
         log::info!("Initializing, wait 0,5 seconds");
         thread::sleep(Duration::from_millis(500));
 
+
+        // Main loop will listen for new messages in the command_reciever queue and execute them when they arrive. 
         loop {
-            if let Ok(command) = rx.recv() {
+            if let Ok(command) = command_reciever.recv() {
                 log::info!("Recieved {command:?}");
                 let duration_interval = Duration::from_millis(command.interval_ms.into());
                 for i in (0..command.num_measurements).rev() {
                     let start_response = Instant::now();
 
-                    let temperature =  adc_temp_reader.read_temperature().unwrap();
+                    let temperature = adc_temp_reader.read_temperature().unwrap();
 
                     let uptime = get_uptime(start_time);
 
                     // Publish MQTT message
                     let msg = format!("{i},{temperature},{uptime}");
-
                     log::info!("Sending values: {i},{temperature},{uptime}");
 
                     mqtt_client
-                        .publish(&config.mqtt_response_topic, QoS::AtLeastOnce, false, msg.as_bytes())
+                        .publish(
+                            &config.mqtt_response_topic,
+                            QoS::AtLeastOnce,
+                            false,
+                            msg.as_bytes(),
+                        )
                         .unwrap();
                     // Duration interval - time spend sending the response
                     let sleep_duration = duration_interval - start_response.elapsed();
@@ -114,9 +126,10 @@ fn main() {
     })
 }
 
-fn connect_wifi(wifi: &mut BlockingWifi<EspWifi<'static>>, config: &ProjBuild) -> anyhow::Result<()> {
-
-
+fn connect_wifi(
+    wifi: &mut BlockingWifi<EspWifi<'static>>,
+    config: &ProjBuild,
+) -> anyhow::Result<()> {
     wifi.set_configuration(&Configuration::Client(ClientConfiguration {
         ssid: config.wifi_ssid.try_into().unwrap(),
         auth_method: AuthMethod::WPA2Personal,
