@@ -29,6 +29,13 @@ fn main() {
     let sys_loop = EspSystemEventLoop::take().unwrap();
     let nvs = EspDefaultNvsPartition::take().unwrap();
 
+    // Initialize Analog to digital converter:
+    let adc = AdcDriver::new(peripherals.adc1, &Config::new().calibration(true)).unwrap();
+    let adc_pin: AdcChannelDriver<{ attenuation::DB_6 }, _> =
+        AdcChannelDriver::new(peripherals.pins.gpio34).unwrap();
+
+    let mut adc_temp_reader = AdcTempReader::new(adc, adc_pin).unwrap();
+
     let config: ProjBuild = ProjBuild::parse(KCONFIG);
 
     log::info!("Using config: {:?}", config);
@@ -42,13 +49,6 @@ fn main() {
 
     // Establish connection to WiFi network
     connect_wifi(&mut wifi, &config).unwrap();
-
-    // Initialize Analog to digital converter:
-    let adc = AdcDriver::new(peripherals.adc1, &Config::new().calibration(true)).unwrap();
-    let adc_pin: AdcChannelDriver<{ attenuation::DB_6 }, _> =
-        AdcChannelDriver::new(peripherals.pins.gpio34).unwrap();
-
-    let mut adc_temp_reader = AdcTempReader::new(adc, adc_pin).unwrap();
 
     // Configure MQTT client
     let (mut mqtt_client, mut mqtt_conn) = mqtt_create(config.mqtt_broker).unwrap();
@@ -87,7 +87,7 @@ fn main() {
         log::info!("Initializing, wait 0,5 seconds");
         thread::sleep(Duration::from_millis(500));
 
-        // Main loop will listen for new messages in the command_reciever queue and execute them when they arrive.
+        // Main loop will listen for new messages from the command_reciever channel and execute them when they arrive.
         loop {
             if let Ok(command) = command_reciever.recv() {
                 log::info!("Recieved {command:?}");
