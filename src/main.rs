@@ -150,9 +150,11 @@ fn get_uptime(start_time: Instant) -> u128 {
     start_time.elapsed().as_millis()
 }
 
-fn repeat_with_delay<F, T>(count: u16, delay: Duration, mut send_fn: F)
+
+// Higher order function which will repeat a function an amount of time with given an interval 
+fn repeat_with_delay<F>(count: u16, delay: Duration, mut send_fn: F)
 where
-    F: FnMut(u16) -> T,
+    F: FnMut(u16),
 {
     (0..count).rev().for_each(|i| {
         let start_time = Instant::now();
