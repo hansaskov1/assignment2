@@ -51,7 +51,7 @@ fn main() {
     let mut adc_temp_reader = AdcTempReader::new(adc, adc_pin).unwrap();
 
     // Configure MQTT client
-    let (mut mqtt_client, mut mqtt_conn) = mqtt_create(&config.mqtt_broker).unwrap();
+    let (mut mqtt_client, mut mqtt_conn) = mqtt_create(config.mqtt_broker).unwrap();
 
     // Main thread where code is executed in
     std::thread::scope(|s| {
@@ -65,7 +65,7 @@ fn main() {
             .spawn_scoped(s, move || {
                 while let Ok(event) = mqtt_conn.next() {
                     if let EventPayload::Received { topic, data, .. } = event.payload() {
-                        if topic == Some(&config.mqtt_command_topic) {
+                        if topic == Some(config.mqtt_command_topic) {
                             log::info!("Received message {data:?} on {topic:?}");
                             if let Ok(command) = data.try_into() {
                                 command_sender.send(command).unwrap();
@@ -78,10 +78,10 @@ fn main() {
 
         // Subscribe to command and response topic
         mqtt_client
-            .subscribe(&config.mqtt_command_topic, QoS::AtMostOnce)
+            .subscribe(config.mqtt_command_topic, QoS::AtMostOnce)
             .unwrap();
         mqtt_client
-            .subscribe(&config.mqtt_response_topic, QoS::AtMostOnce)
+            .subscribe(config.mqtt_response_topic, QoS::AtMostOnce)
             .unwrap();
 
         // Add small delay to make sure mqtt starts up correctly
@@ -107,7 +107,7 @@ fn main() {
 
                     mqtt_client
                         .publish(
-                            &config.mqtt_response_topic,
+                            config.mqtt_response_topic,
                             QoS::AtLeastOnce,
                             false,
                             msg.as_bytes(),

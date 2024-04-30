@@ -36,6 +36,6 @@ impl<'a> ProjBuild<'a> {
             mqtt_response_topic: config_map.get("mqtt_response_topic").unwrap(),
         };
 
-        return config;
+        config
     }
 }
