@@ -93,26 +93,22 @@ fn main() {
                 log::info!("Recieved {command:?}");
                 let duration_interval = Duration::from_millis(command.interval_ms.into());
 
-                repeat_with_delay(
-                    command.num_measurements,
-                    duration_interval,
-                    |i| {
-                        let temperature = adc_temp_reader.read_temperature().unwrap();
-                        let uptime = get_uptime(start_time);
-                        let msg = format!("{i},{temperature},{uptime}");
+                repeat_with_delay(command.num_measurements, duration_interval, |i| {
+                    let temperature = adc_temp_reader.read_temperature().unwrap();
+                    let uptime = get_uptime(start_time);
+                    let msg = format!("{i},{temperature},{uptime}");
 
-                        log::info!("Sending values: {msg}");
+                    log::info!("Sending values: {msg}");
 
-                        mqtt_client
-                            .publish(
-                                config.mqtt_response_topic,
-                                QoS::AtLeastOnce,
-                                false,
-                                msg.as_bytes(),
-                            )
-                            .unwrap();
-                    },
-                );
+                    mqtt_client
+                        .publish(
+                            config.mqtt_response_topic,
+                            QoS::AtLeastOnce,
+                            false,
+                            msg.as_bytes(),
+                        )
+                        .unwrap();
+                });
             }
         }
     })
@@ -154,22 +150,17 @@ fn get_uptime(start_time: Instant) -> u128 {
     start_time.elapsed().as_millis()
 }
 
-fn repeat_with_delay<F, T>( count: u16, delay: Duration, mut send_fn: F, )
+fn repeat_with_delay<F, T>(count: u16, delay: Duration, mut send_fn: F)
 where
     F: FnMut(u16) -> T,
 {
-    (0..count)
-        .rev()
-        .scan((), move |_, i| {
-            let start_time = Instant::now();
-            let value = send_fn(i);
-            let elapsed = start_time.elapsed();
+    (0..count).rev().for_each(|i| {
+        let start_time = Instant::now();
+        send_fn(i);
+        let elapsed = start_time.elapsed();
 
-            if let Some(remaining) = delay.checked_sub(elapsed) {
-                thread::sleep(remaining);
-            }
-
-            Some(value)
-        })
-        .for_each(drop);
+        if let Some(remaining) = delay.checked_sub(elapsed) {
+            thread::sleep(remaining);
+        }
+    });
 }
