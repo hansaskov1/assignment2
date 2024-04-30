@@ -43,7 +43,7 @@ fn main() {
     // Establish connection to WiFi network
     connect_wifi(&mut wifi, &config).unwrap();
 
-    // Initialize Analog to digital converter: 
+    // Initialize Analog to digital converter:
     let adc = AdcDriver::new(peripherals.adc1, &Config::new().calibration(true)).unwrap();
     let adc_pin: AdcChannelDriver<{ attenuation::DB_6 }, _> =
         AdcChannelDriver::new(peripherals.pins.gpio34).unwrap();
@@ -55,7 +55,6 @@ fn main() {
 
     // Main thread where code is executed in
     std::thread::scope(|s| {
-
         // Message bus to communicate between threads
         let (command_sender, command_reciever) = mpsc::channel::<Command>();
 
@@ -88,39 +87,32 @@ fn main() {
         log::info!("Initializing, wait 0,5 seconds");
         thread::sleep(Duration::from_millis(500));
 
-
-        // Main loop will listen for new messages in the command_reciever queue and execute them when they arrive. 
+        // Main loop will listen for new messages in the command_reciever queue and execute them when they arrive.
         loop {
             if let Ok(command) = command_reciever.recv() {
                 log::info!("Recieved {command:?}");
                 let duration_interval = Duration::from_millis(command.interval_ms.into());
-                for i in (0..command.num_measurements).rev() {
-                    let start_response = Instant::now();
 
-                    let temperature = adc_temp_reader.read_temperature().unwrap();
+                repeat_with_delay(
+                    command.num_measurements,
+                    duration_interval,
+                    |i| {
+                        let temperature = adc_temp_reader.read_temperature().unwrap();
+                        let uptime = get_uptime(start_time);
+                        let msg = format!("{i},{temperature},{uptime}");
 
-                    let uptime = get_uptime(start_time);
+                        log::info!("Sending values: {msg}");
 
-                    // Publish MQTT message
-                    let msg = format!("{i},{temperature},{uptime}");
-                    log::info!("Sending values: {i},{temperature},{uptime}");
-
-                    mqtt_client
-                        .publish(
-                            config.mqtt_response_topic,
-                            QoS::AtLeastOnce,
-                            false,
-                            msg.as_bytes(),
-                        )
-                        .unwrap();
-                    // Duration interval - time spend sending the response
-                    let sleep_duration = duration_interval - start_response.elapsed();
-
-                    if sleep_duration > Duration::from_millis(0) {
-                        log::info!("Sleeping for {sleep_duration:?}");
-                        thread::sleep(sleep_duration);
-                    }
-                }
+                        mqtt_client
+                            .publish(
+                                config.mqtt_response_topic,
+                                QoS::AtLeastOnce,
+                                false,
+                                msg.as_bytes(),
+                            )
+                            .unwrap();
+                    },
+                );
             }
         }
     })
@@ -160,4 +152,24 @@ fn mqtt_create(url: &str) -> anyhow::Result<(EspMqttClient<'static>, EspMqttConn
 
 fn get_uptime(start_time: Instant) -> u128 {
     start_time.elapsed().as_millis()
+}
+
+fn repeat_with_delay<F, T>( count: u16, delay: Duration, mut send_fn: F, )
+where
+    F: FnMut(u16) -> T,
+{
+    (0..count)
+        .rev()
+        .scan((), move |_, i| {
+            let start_time = Instant::now();
+            let value = send_fn(i);
+            let elapsed = start_time.elapsed();
+
+            if let Some(remaining) = delay.checked_sub(elapsed) {
+                thread::sleep(remaining);
+            }
+
+            Some(value)
+        })
+        .for_each(drop);
 }
