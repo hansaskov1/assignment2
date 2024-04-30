@@ -1,4 +1,4 @@
-# Get Started Guide (for Linux)
+# Get Started Guide (for Ubuntu 22.04)
 
 This guide will help you set up your Linux environment for developing with the ESP32 microcontroller and Rust. This guide is made based on the two following guides: [Esp template github](https://github.com/esp-rs/esp-idf-template?tab=readme-ov-file#prerequisites) and the prerequisites to work with ESP32 [Expressif docs](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/linux-macos-setup.html#step-1-install-prerequisites)
 
