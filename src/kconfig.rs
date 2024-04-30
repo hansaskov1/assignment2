@@ -33,9 +33,9 @@ impl<'a> ProjBuild<'a> {
             wifi_ssid: config_map.get("wifi_ssid").unwrap(),
             wifi_password: config_map.get("wifi_password").unwrap(),
             mqtt_command_topic: config_map.get("mqtt_command_topic").unwrap(),
-            mqtt_response_topic: config_map.get("mqtt_response_topic").unwrap()
+            mqtt_response_topic: config_map.get("mqtt_response_topic").unwrap(),
         };
 
-        return config
+        return config;
     }
 }
