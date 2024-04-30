@@ -82,14 +82,6 @@ fn main() {
         log::info!("Initializing, wait 0,5 seconds");
         thread::sleep(Duration::from_millis(500));
 
-        let initialized_message = "Started";
-        mqtt_client.publish(
-            &config.mqtt_response_topic,
-            QoS::AtLeastOnce,
-            false,
-            initialized_message.as_bytes(),
-        );
-
         loop {
             if let Ok(command) = rx.recv() {
                 log::info!("Recieved {command:?}");
@@ -127,7 +119,7 @@ fn connect_wifi(wifi: &mut BlockingWifi<EspWifi<'static>>, config: &ProjBuild) -
 
     wifi.set_configuration(&Configuration::Client(ClientConfiguration {
         ssid: config.wifi_ssid.try_into().unwrap(),
-        auth_method: AuthMethod::WPA2WPA3Personal,
+        auth_method: AuthMethod::WPA2Personal,
         password: config.wifi_password.try_into().unwrap(),
         ..Default::default()
     }))?;
