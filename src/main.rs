@@ -93,7 +93,10 @@ fn main() {
                 log::info!("Recieved {command:?}");
                 let duration_interval = Duration::from_millis(command.interval_ms.into());
 
-                repeat_with_delay(command.num_measurements, duration_interval, |i| {
+                let count = command.num_measurements;
+                let delay = duration_interval;
+
+                (0..count).rev().delay(delay).for_each(|i| {
                     let temperature = adc_temp_reader.read_temperature().unwrap();
                     let uptime = get_uptime(start_time);
                     let msg = format!("{i},{temperature},{uptime}");
@@ -150,19 +153,31 @@ fn get_uptime(start_time: Instant) -> u128 {
     start_time.elapsed().as_millis()
 }
 
+trait DelayedIterator: Iterator {
+    fn delay(self, delay: Duration) -> DelayedIter<Self::Item, Self>
+    where
+        Self: Sized,
+    {
+        DelayedIter { iter: self, delay }
+    }
+}
 
-// Higher order function which will repeat a function an amount of time with given an interval 
-fn repeat_with_delay<F>(count: u16, delay: Duration, mut send_fn: F)
-where
-    F: FnMut(u16),
-{
-    (0..count).rev().for_each(|i| {
-        let start_time = Instant::now();
-        send_fn(i);
-        let elapsed = start_time.elapsed();
+impl<I: Iterator> DelayedIterator for I {}
 
-        if let Some(remaining) = delay.checked_sub(elapsed) {
-            thread::sleep(remaining);
-        }
-    });
+struct DelayedIter<T, I: Iterator<Item = T>> {
+    iter: I,
+    delay: Duration,
+}
+
+impl<T, I: Iterator<Item = T>> Iterator for DelayedIter<T, I> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let item = self.iter.next()?;
+        let start = Instant::now();
+        let elapsed = start.elapsed();
+        let remaining_delay = self.delay.saturating_sub(elapsed);
+        thread::sleep(remaining_delay);
+        Some(item)
+    }
 }

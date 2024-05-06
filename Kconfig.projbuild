@@ -2,7 +2,7 @@ menu "Configuration"
 
 config WIFI_SSID
     string "WiFi SSID"
-    default "Hjemmet"
+    default "hansaskov"
     
 config WIFI_PASSWORD
     string "WiFi Password"
@@ -10,7 +10,7 @@ config WIFI_PASSWORD
     
 config MQTT_BROKER
     string "MQTT Broker URL"
-    default "mqtt://192.168.0.49:1883"
+    default "mqtt://192.168.45.62:1883"
     
 config MQTT_COMMAND_TOPIC
     string "MQTT Command Topic"
