@@ -26,13 +26,13 @@ pub trait IntervalIterator: Iterator {
     ///     println!("{}", value);
     /// }
     /// ```
-    fn with_interval(self, interval_duration: Duration) -> IntervalIter<Self::Item, Self>
+    fn with_interval(self, interval: Duration) -> IntervalIter<Self::Item, Self>
     where
         Self: Sized,
     {
         IntervalIter {
             original_iterator: self,
-            interval_duration,
+            interval,
         }
     }
 }
@@ -41,14 +41,14 @@ impl<I: Iterator> IntervalIterator for I {}
 
 pub struct IntervalIter<T, I: Iterator<Item = T>> {
     original_iterator: I,
-    interval_duration: Duration,
+    interval: Duration,
 }
 
 impl<T, I: Iterator<Item = T>> IntervalIter<T, I> {
-    pub fn new(original_iterator: I, interval_duration: Duration) -> Self {
+    pub fn new(original_iterator: I, interval: Duration) -> Self {
         Self {
             original_iterator,
-            interval_duration,
+            interval,
         }
     }
 }
@@ -63,7 +63,7 @@ impl<T, I: Iterator<Item = T>> Iterator for IntervalIter<T, I> {
         let start = Instant::now();
         let item = self.original_iterator.next()?;
         let elapsed = start.elapsed();
-        let remaining_interval = self.interval_duration.saturating_sub(elapsed);
+        let remaining_interval = self.interval.saturating_sub(elapsed);
         thread::sleep(remaining_interval);
         Some(item)
     }

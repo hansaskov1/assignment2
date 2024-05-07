@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use assignment2::adc::AdcTempReader;
 use assignment2::command::Command;
-use assignment2::delay::IntervalIterator;
+use assignment2::interval_iterator::IntervalIterator;
 use assignment2::kconfig::ProjBuild;
 use esp_idf_hal::adc::*;
 use esp_idf_hal::{adc::config::Config, peripherals::Peripherals};
