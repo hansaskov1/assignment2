@@ -93,10 +93,9 @@ fn main() {
                 let count = command.count;
                 let delay = Duration::from_millis(command.interval_ms.into());
 
-                repeat_with_delay(count, delay, |i| {
+                countdown_with_interval(count, delay, |i| {
                     let temperature = adc_temp_reader.read_temperature().unwrap();
-                    let uptime = get_uptime(start_time);
-                    let msg = format!("{i},{temperature},{uptime}");
+                    let msg = format!("{},{},{}", i, temperature, get_uptime(start_time));
 
                     log::info!("Sending values: {msg}");
 
@@ -150,6 +149,6 @@ fn get_uptime(start_time: Instant) -> u128 {
     start_time.elapsed().as_millis()
 }
 
-fn repeat_with_delay<F: FnMut(u16)>(count: u16, interval: Duration, send_fn: F) {
+fn countdown_with_interval<F: FnMut(u16)>(count: u16, interval: Duration, send_fn: F) {
     (0..count).rev().with_interval(interval).for_each(send_fn)
 }
