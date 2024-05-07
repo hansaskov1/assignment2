@@ -2,7 +2,7 @@ use std::convert::TryInto;
 
 #[derive(Debug)]
 pub struct Command {
-    pub num_measurements: u16,
+    pub count: u16,
     pub interval_ms: u16,
 }
 
@@ -25,7 +25,7 @@ impl TryInto<Command> for &[u8] {
             .ok_or("Invalid format, expected ',' separator")?;
 
         Ok(Command {
-            num_measurements: num_measurements
+            count: num_measurements
                 .parse()
                 .map_err(|_| "Invalid num_measurements")?,
             interval_ms: interval_ms.parse().map_err(|_| "Invalid interval_ms")?,

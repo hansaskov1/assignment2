@@ -1,9 +1,10 @@
 use std::sync::mpsc;
+use std::time::Duration;
 use std::time::Instant;
-use std::{thread, time::Duration};
 
 use assignment2::adc::AdcTempReader;
 use assignment2::command::Command;
+use assignment2::delay::IntervalIterator;
 use assignment2::kconfig::ProjBuild;
 use esp_idf_hal::adc::*;
 use esp_idf_hal::{adc::config::Config, peripherals::Peripherals};
@@ -83,20 +84,16 @@ fn main() {
             .subscribe(config.mqtt_response_topic, QoS::AtMostOnce)
             .unwrap();
 
-        // Add small delay to make sure mqtt starts up correctly
-        log::info!("Initializing, wait 0,5 seconds");
-        thread::sleep(Duration::from_millis(500));
+        log::info!("Ready to accept connections");
 
         // Main loop will listen for new messages from the command_reciever channel and execute them when they arrive.
         loop {
             if let Ok(command) = command_reciever.recv() {
                 log::info!("Recieved {command:?}");
-                let duration_interval = Duration::from_millis(command.interval_ms.into());
+                let count = command.count;
+                let delay = Duration::from_millis(command.interval_ms.into());
 
-                let count = command.num_measurements;
-                let delay = duration_interval;
-
-                (0..count).rev().delay(delay).for_each(|i| {
+                repeat_with_delay(count, delay, |i| {
                     let temperature = adc_temp_reader.read_temperature().unwrap();
                     let uptime = get_uptime(start_time);
                     let msg = format!("{i},{temperature},{uptime}");
@@ -153,31 +150,6 @@ fn get_uptime(start_time: Instant) -> u128 {
     start_time.elapsed().as_millis()
 }
 
-trait DelayedIterator: Iterator {
-    fn delay(self, delay: Duration) -> DelayedIter<Self::Item, Self>
-    where
-        Self: Sized,
-    {
-        DelayedIter { iter: self, delay }
-    }
-}
-
-impl<I: Iterator> DelayedIterator for I {}
-
-struct DelayedIter<T, I: Iterator<Item = T>> {
-    iter: I,
-    delay: Duration,
-}
-
-impl<T, I: Iterator<Item = T>> Iterator for DelayedIter<T, I> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let item = self.iter.next()?;
-        let start = Instant::now();
-        let elapsed = start.elapsed();
-        let remaining_delay = self.delay.saturating_sub(elapsed);
-        thread::sleep(remaining_delay);
-        Some(item)
-    }
+fn repeat_with_delay<F: FnMut(u16)>(count: u16, interval: Duration, send_fn: F) {
+    (0..count).rev().with_interval(interval).for_each(send_fn)
 }
